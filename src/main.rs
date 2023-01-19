@@ -5,39 +5,15 @@
 use std::{io, sync::Arc};
 
 use actix_cors::Cors;
-use actix_web::{
-    get, middleware, route,
-    web::{self, Data},
-    App, HttpResponse, HttpServer, Responder,
-};
-use actix_web_lab::respond::Html;
+use actix_web::{middleware, web::Data, App, HttpServer};
 use dotenv::dotenv;
-use juniper::http::{graphiql::graphiql_source, GraphQLRequest};
-use sqlx::{postgres::PgPoolOptions, Pool, Postgres};
+use sqlx::postgres::PgPoolOptions;
 
 mod schema;
+mod services;
 
-use crate::schema::{create_schema, Context, Schema};
-
-/// GraphiQL playground UI
-#[get("/graphiql")]
-async fn graphql_playground() -> impl Responder {
-    Html(graphiql_source("/graphql", None))
-}
-
-/// GraphQL endpoint
-#[route("/graphql", method = "GET", method = "POST")]
-async fn graphql(
-    schema: web::Data<Schema>,
-    db: web::Data<Pool<Postgres>>,
-    data: web::Json<GraphQLRequest>,
-) -> impl Responder {
-    let context = Context {
-        db: db.as_ref().to_owned(),
-    };
-    let user = data.execute(&schema, &context).await;
-    HttpResponse::Ok().json(user)
-}
+use crate::schema::create_schema;
+use crate::services::{graphql, graphql_playground};
 
 #[actix_web::main]
 async fn main() -> io::Result<()> {
