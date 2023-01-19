@@ -20,7 +20,6 @@ async fn main() -> io::Result<()> {
     dotenv().ok();
     env_logger::init_from_env(env_logger::Env::new().default_filter_or("info"));
 
-    // Create Juniper schema
     let schema = Arc::new(create_schema());
 
     let database_url = std::env::var("DATABASE_URL").expect("DATABASE_URL must be set");
@@ -34,14 +33,12 @@ async fn main() -> io::Result<()> {
     log::info!("starting HTTP server on port 8080");
     log::info!("GraphiQL playground: http://localhost:8080/graphiql");
 
-    // Start HTTP server
     HttpServer::new(move || {
         App::new()
             .app_data(Data::from(schema.clone()))
             .app_data(Data::new(pool.clone()))
             .service(graphql)
             .service(graphql_playground)
-            // the graphiql UI requires CORS to be enabled
             .wrap(Cors::permissive())
             .wrap(middleware::Logger::default())
     })
