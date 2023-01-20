@@ -1,7 +1,6 @@
 use juniper::{EmptySubscription, RootNode};
 use juniper::{FieldError, FieldResult};
 
-use juniper::{GraphQLInputObject, GraphQLObject};
 use sqlx::{FromRow, Pool, Postgres};
 
 pub struct Context {
@@ -10,59 +9,68 @@ pub struct Context {
 
 impl juniper::Context for Context {}
 
-#[derive(GraphQLObject, FromRow)]
-#[graphql(description = "A humanoid creature in the Star Wars universe")]
-struct Human {
-    id: i32,
-    name: String,
-    home_planet: String,
+#[derive(juniper::GraphQLScalarValue)]
+#[graphql(transparent)]
+struct JsonString(String);
+
+#[derive(FromRow, juniper::GraphQLObject)]
+#[allow(dead_code)]
+struct IndexerStorage {
+    function_name: String,
+    key_name: String,
+    value: String,
 }
 
-#[derive(GraphQLInputObject)]
-#[graphql(description = "A humanoid creature in the Star Wars universe")]
-struct NewHuman {
-    name: String,
-    home_planet: String,
-}
-
-pub struct QueryRoot;
+pub struct Query;
 
 #[juniper::graphql_object(context = Context)]
-impl QueryRoot {
-    async fn humans(context: &Context) -> FieldResult<Vec<Human>> {
-        sqlx::query_as::<_, Human>("SELECT * from humans")
-            .fetch_all(&context.db)
-            .await
-            .map_err(FieldError::from)
-    }
-
-    async fn human(context: &Context, id: i32) -> FieldResult<Human> {
-        sqlx::query_as::<_, Human>("SELECT * from humans where id = $1")
-            .bind(id)
-            .fetch_one(&context.db)
-            .await
-            .map_err(FieldError::from)
-    }
-}
-
-pub struct MutationRoot;
-
-#[juniper::graphql_object(context = Context)]
-impl MutationRoot {
-    async fn create_human(context: &Context, new_human: NewHuman) -> FieldResult<Human> {
-        sqlx::query_as::<_, Human>(
-            "INSERT INTO humans (name, home_planet) VALUES ($1, $2) RETURNING *",
+impl Query {
+    async fn get(
+        context: &Context,
+        function_name: String,
+        key: String,
+    ) -> FieldResult<Option<JsonString>> {
+        match sqlx::query_as::<_, IndexerStorage>(
+            "SELECT * FROM indexer_storage WHERE function_name = $1 AND key_name = $2",
         )
-        .bind(new_human.name)
-        .bind(new_human.home_planet)
-        .fetch_one(&context.db)
+        .bind(function_name)
+        .bind(key)
+        .fetch_optional(&context.db)
         .await
-        .map_err(FieldError::from)
+        {
+            Ok(Some(storage)) => Ok(Some(JsonString(storage.value))),
+            Ok(None) => Ok(None),
+            Err(err) => Err(FieldError::from(err)),
+        }
     }
 }
 
-pub type Schema = RootNode<'static, QueryRoot, MutationRoot, EmptySubscription<Context>>;
+pub struct Mutation;
+
+#[juniper::graphql_object(context = Context)]
+impl Mutation {
+    async fn set(
+        context: &Context,
+        function_name: String,
+        key: String,
+        data: JsonString,
+    ) -> FieldResult<JsonString> {
+        match sqlx::query_as::<_, IndexerStorage>(
+            "INSERT INTO indexer_storage (function_name, key_name, value) VALUES ($1, $2, $3) RETURNING *"
+        )
+            .bind(function_name)
+            .bind(key)
+            .bind(data.0)
+            .fetch_one(&context.db)
+            .await {
+                Ok(storage) => Ok(JsonString(storage.value)),
+                Err(err) => Err(FieldError::from(err))
+            }
+    }
+}
+
+pub type Schema = RootNode<'static, Query, Mutation, EmptySubscription<Context>>;
 
 pub fn create_schema() -> Schema {
-    Schema::new(QueryRoot {}, MutationRoot {}, EmptySubscription::new())
+    Schema::new(Query {}, Mutation {}, EmptySubscription::new())
 }
