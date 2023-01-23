@@ -1,0 +1,19 @@
+---
+source: src/schema.rs
+expression: create_schema().as_schema_language()
+---
+type Query {
+  get(functionName: String!, key: String!): JsonString
+}
+
+type Mutation {
+  set(functionName: String!, key: String!, data: JsonString!): JsonString!
+}
+
+scalar JsonString
+
+schema {
+  query: Query
+  mutation: Mutation
+}
+
