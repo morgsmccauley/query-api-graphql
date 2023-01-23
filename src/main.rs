@@ -23,6 +23,10 @@ async fn main() -> io::Result<()> {
     let schema = Arc::new(create_schema());
 
     let database_url = std::env::var("DATABASE_URL").expect("DATABASE_URL must be set");
+    let port = std::env::var("PORT")
+        .expect("PORT must be set")
+        .parse::<u16>()
+        .expect("PORT must be numeric");
 
     let pool = PgPoolOptions::new()
         .max_connections(5)
@@ -43,7 +47,7 @@ async fn main() -> io::Result<()> {
             .wrap(middleware::Logger::default())
     })
     .workers(2)
-    .bind(("127.0.0.1", 8080))?
+    .bind(("127.0.0.1", port))?
     .run()
     .await
 }
