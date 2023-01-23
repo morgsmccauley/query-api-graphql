@@ -34,8 +34,8 @@ async fn main() -> io::Result<()> {
         .await
         .expect("Error building a connection pool");
 
-    log::info!("starting HTTP server on port 8080");
-    log::info!("GraphiQL playground: http://localhost:8080/graphiql");
+    log::info!("starting HTTP server on port {}", port);
+    log::info!("GraphiQL playground: http://localhost:{}/graphiql", port);
 
     HttpServer::new(move || {
         App::new()
