@@ -1,17 +1,9 @@
-use sqlx::{FromRow, Pool, Postgres};
+use crate::database::{self, Pool};
 
 #[derive(serde::Serialize, serde::Deserialize)]
 struct JsonString(String);
 
 async_graphql::scalar!(JsonString);
-
-#[derive(FromRow, async_graphql::SimpleObject)]
-#[allow(dead_code)]
-struct IndexerStorage {
-    function_name: String,
-    key_name: String,
-    value: String,
-}
 
 pub struct Query;
 
@@ -23,16 +15,7 @@ impl Query {
         function_name: String,
         key: String,
     ) -> async_graphql::Result<Option<JsonString>> {
-        let pool = context.data::<Pool<Postgres>>()?;
-
-        match sqlx::query_as::<_, IndexerStorage>(
-            "SELECT * FROM indexer_storage WHERE function_name = $1 AND key_name = $2",
-        )
-        .bind(function_name)
-        .bind(key)
-        .fetch_optional(pool)
-        .await
-        {
+        match database::indexer_storage::get(context.data::<Pool>()?, function_name, key).await {
             Ok(Some(storage)) => Ok(Some(JsonString(storage.value))),
             Ok(None) => Ok(None),
             Err(err) => Err(err.into()),
@@ -51,19 +34,12 @@ impl Mutation {
         key: String,
         data: JsonString,
     ) -> async_graphql::Result<JsonString> {
-        let pool = context.data::<Pool<Postgres>>()?;
-
-        match sqlx::query_as::<_, IndexerStorage>(
-            "INSERT INTO indexer_storage (function_name, key_name, value) VALUES ($1, $2, $3) RETURNING *"
-        )
-            .bind(function_name)
-            .bind(key)
-            .bind(data.0)
-            .fetch_one(pool)
-            .await {
-                Ok(storage) => Ok(JsonString(storage.value)),
-                Err(err) => Err(err.into())
-            }
+        match database::indexer_storage::create(context.data::<Pool>()?, function_name, key, data.0)
+            .await
+        {
+            Ok(storage) => Ok(JsonString(storage.value)),
+            Err(err) => Err(err.into()),
+        }
     }
 }
 
