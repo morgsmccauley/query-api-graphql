@@ -1,19 +1,11 @@
-use juniper::{EmptySubscription, RootNode};
-use juniper::{FieldError, FieldResult};
-
 use sqlx::{FromRow, Pool, Postgres};
 
-pub struct Context {
-    pub db: Pool<Postgres>,
-}
-
-impl juniper::Context for Context {}
-
-#[derive(juniper::GraphQLScalarValue)]
-#[graphql(transparent)]
+#[derive(serde::Serialize, serde::Deserialize)]
 struct JsonString(String);
 
-#[derive(FromRow, juniper::GraphQLObject)]
+async_graphql::scalar!(JsonString);
+
+#[derive(FromRow, async_graphql::SimpleObject)]
 #[allow(dead_code)]
 struct IndexerStorage {
     function_name: String,
@@ -23,59 +15,66 @@ struct IndexerStorage {
 
 pub struct Query;
 
-#[juniper::graphql_object(context = Context)]
+#[async_graphql::Object]
 impl Query {
     async fn get(
-        context: &Context,
+        &self,
+        context: &async_graphql::Context<'_>,
         function_name: String,
         key: String,
-    ) -> FieldResult<Option<JsonString>> {
+    ) -> async_graphql::Result<Option<JsonString>> {
+        let pool = context.data::<Pool<Postgres>>()?;
+
         match sqlx::query_as::<_, IndexerStorage>(
             "SELECT * FROM indexer_storage WHERE function_name = $1 AND key_name = $2",
         )
         .bind(function_name)
         .bind(key)
-        .fetch_optional(&context.db)
+        .fetch_optional(pool)
         .await
         {
             Ok(Some(storage)) => Ok(Some(JsonString(storage.value))),
             Ok(None) => Ok(None),
-            Err(err) => Err(FieldError::from(err)),
+            Err(err) => Err(err.into()),
         }
     }
 }
 
 pub struct Mutation;
 
-#[juniper::graphql_object(context = Context)]
+#[async_graphql::Object]
 impl Mutation {
     async fn set(
-        context: &Context,
+        &self,
+        context: &async_graphql::Context<'_>,
         function_name: String,
         key: String,
         data: JsonString,
-    ) -> FieldResult<JsonString> {
+    ) -> async_graphql::Result<JsonString> {
+        let pool = context.data::<Pool<Postgres>>()?;
+
         match sqlx::query_as::<_, IndexerStorage>(
             "INSERT INTO indexer_storage (function_name, key_name, value) VALUES ($1, $2, $3) RETURNING *"
         )
             .bind(function_name)
             .bind(key)
             .bind(data.0)
-            .fetch_one(&context.db)
+            .fetch_one(pool)
             .await {
                 Ok(storage) => Ok(JsonString(storage.value)),
-                Err(err) => Err(FieldError::from(err))
+                Err(err) => Err(err.into())
             }
     }
 }
 
-pub type Schema = RootNode<'static, Query, Mutation, EmptySubscription<Context>>;
+pub type Schema = async_graphql::Schema<Query, Mutation, async_graphql::EmptySubscription>;
 
-pub fn create_schema() -> Schema {
-    Schema::new(Query {}, Mutation {}, EmptySubscription::new())
+pub fn create_schema(
+) -> async_graphql::SchemaBuilder<Query, Mutation, async_graphql::EmptySubscription> {
+    async_graphql::Schema::build(Query, Mutation, async_graphql::EmptySubscription)
 }
 
 #[test]
 fn schema_snapshot() {
-    insta::assert_snapshot!(create_schema().as_schema_language())
+    insta::assert_snapshot!(create_schema().finish().sdl())
 }
