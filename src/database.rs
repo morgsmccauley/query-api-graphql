@@ -40,7 +40,7 @@ pub mod indexer_storage {
         data: String,
     ) -> Result<super::IndexerStorage, sqlx::Error> {
         sqlx::query_as::<_, super::IndexerStorage>(
-            "INSERT INTO indexer_storage (function_name, key_name, value) VALUES ($1, $2, $3) RETURNING *"
+            "INSERT INTO indexer_storage (function_name, key_name, value) VALUES ($1, $2, $3) ON CONFLICT ON CONSTRAINT indexer_storage_pkey  DO UPDATE SET value = EXCLUDED.value RETURNING *"
         )
             .bind(function_name)
             .bind(key)
