@@ -10,7 +10,7 @@ mod services;
 
 use crate::database::create_pool;
 use crate::schema::create_schema;
-use crate::services::{graphql, graphql_playground};
+use crate::services::{auth, graphql, graphql_playground};
 
 #[actix_web::main]
 async fn main() -> io::Result<()> {
@@ -31,6 +31,7 @@ async fn main() -> io::Result<()> {
         App::new()
             .app_data(Data::new(schema.clone()))
             .service(graphql)
+            .service(auth)
             .service(graphql_playground)
             .wrap(Cors::permissive())
             .wrap(middleware::Logger::default())
