@@ -18,7 +18,12 @@ pub(crate) async fn graphql(schema: web::Data<Schema>, req: GraphQLRequest) -> G
 
 #[route("/auth", method = "GET", method = "POST")]
 pub(crate) async fn auth(req: HttpRequest) -> impl Responder {
+    let role = match req.headers().get("X-Hasura-Role") {
+        Some(role_header) => role_header.to_str().unwrap().to_string(),
+        None => std::env::var("DEFAULT_HASURA_ROLE").unwrap(),
+    };
+
     HttpResponse::Ok().json(serde_json::json!({
-        "X-Hasura-Role": std::env::var("HASURA_ROLE").unwrap(),
+        "X-Hasura-Role": role,
     }))
 }
